@@ -1,81 +1,73 @@
 <!doctype html>
 <html lang="ru">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Guurenko AI • Mini App</title>
+  <title>Guurenko Mini App</title>
+  <link rel="icon" href="/webapp/favicon.ico" />
   <link rel="stylesheet" href="/webapp/style.css" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
   <div class="wrap">
-    <header class="top">
-      <div>
-        <h1>Guurenko AI</h1>
-        <p class="muted">Chat • Фото • Видео • Музыка</p>
-      </div>
-      <div class="pill" id="who">tg: —</div>
-    </header>
+    <h1>Guurenko AI</h1>
 
-    <nav class="tabs">
-      <button class="tab active" data-tab="chat">Chat</button>
+    <div class="tabs">
+      <button class="tab active" data-tab="chat">Чат</button>
       <button class="tab" data-tab="image">Фото</button>
       <button class="tab" data-tab="video">Видео</button>
       <button class="tab" data-tab="music">Музыка</button>
-    </nav>
+    </div>
 
-    <section class="card">
-      <div class="row">
-        <label>Модель</label>
-        <select id="model"></select>
-      </div>
+    <div id="status" class="status">Загрузка…</div>
 
-      <div id="chatPane" class="pane">
-        <label>Сообщение</label>
-        <textarea id="chatText" rows="5" placeholder="Напиши запрос..."></textarea>
-        <div class="actions">
-          <button id="chatBtn">Отправить</button>
-          <span class="muted" id="chatStatus"></span>
-        </div>
-        <pre id="chatOut" class="out"></pre>
-      </div>
+    <div class="panel" id="panel-chat">
+      <label>Модель</label>
+      <select id="model-chat"></select>
 
-      <div id="imagePane" class="pane hidden">
-        <label>Промпт</label>
-        <textarea id="imagePrompt" rows="5" placeholder="Промпт для изображения..."></textarea>
-        <div class="actions">
-          <button id="imageBtn">Сгенерировать</button>
-          <span class="muted" id="imageStatus"></span>
-        </div>
-        <div id="imageOut" class="media"></div>
-      </div>
+      <label>Сообщение</label>
+      <textarea id="input-chat" rows="4" placeholder="Напиши сообщение…"></textarea>
+      <button id="btn-chat">Отправить</button>
 
-      <div id="videoPane" class="pane hidden">
-        <label>Промпт</label>
-        <textarea id="videoPrompt" rows="5" placeholder="Промпт для видео..."></textarea>
-        <div class="actions">
-          <button id="videoBtn">Сгенерировать</button>
-          <span class="muted" id="videoStatus"></span>
-        </div>
-        <div id="videoOut" class="media"></div>
-      </div>
+      <pre id="out-chat" class="out"></pre>
+    </div>
 
-      <div id="musicPane" class="pane hidden">
-        <label>Lyrics</label>
-        <textarea id="musicLyrics" rows="6" placeholder="Текст песни..."></textarea>
-        <label>Style (опционально)</label>
-        <input id="musicStyle" placeholder="Например: pop, dance, rap..." />
-        <div class="actions">
-          <button id="musicBtn">Сгенерировать</button>
-          <span class="muted" id="musicStatus"></span>
-        </div>
-        <div id="musicOut" class="media"></div>
-      </div>
-    </section>
+    <div class="panel hidden" id="panel-image">
+      <label>Модель</label>
+      <select id="model-image"></select>
 
-    <footer class="muted small">
-      Если генерация долгая — мы создаём задачу и поллим результат (без 690 секунд тайм-аута).
-    </footer>
+      <label>Промпт</label>
+      <textarea id="input-image" rows="4" placeholder="Опиши изображение…"></textarea>
+      <button id="btn-image">Сгенерировать</button>
+
+      <div id="out-image" class="out"></div>
+    </div>
+
+    <div class="panel hidden" id="panel-video">
+      <label>Модель</label>
+      <select id="model-video"></select>
+
+      <label>Промпт</label>
+      <textarea id="input-video" rows="4" placeholder="Опиши видео…"></textarea>
+      <button id="btn-video">Сгенерировать</button>
+
+      <div id="out-video" class="out"></div>
+    </div>
+
+    <div class="panel hidden" id="panel-music">
+      <label>Модель</label>
+      <select id="model-music"></select>
+
+      <label>Текст (lyrics)</label>
+      <textarea id="input-music" rows="4" placeholder="Вставь текст песни…"></textarea>
+
+      <label>Стиль (опционально)</label>
+      <input id="style-music" placeholder="например: pop, edm, rnb…" />
+
+      <button id="btn-music">Сгенерировать</button>
+
+      <div id="out-music" class="out"></div>
+    </div>
   </div>
 
   <script src="/webapp/app.js"></script>
