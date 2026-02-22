@@ -19,21 +19,16 @@ async def init_db():
 
         # jobs
         await db.execute("""
-        CREATE TABLE IF NOT EXISTS jobs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tg_id INTEGER NOT NULL,
-            type TEXT NOT NULL,             -- chat|image|video|music
-            status TEXT NOT NULL,           -- queued|running|done|error
-            model TEXT,
-            prompt TEXT,
-            payload_json TEXT,
-            result_json TEXT,
-            error TEXT,
-            created_at TEXT DEFAULT (datetime('now')),
-            updated_at TEXT DEFAULT (datetime('now'))
-        )
-        """)
-
+       CREATE TABLE IF NOT EXISTS jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tg_id INTEGER,
+    type TEXT,
+    model TEXT,
+    prompt TEXT,
+    status TEXT DEFAULT 'pending',
+    result TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
         # logs
         await db.execute("""
         CREATE TABLE IF NOT EXISTS logs (
