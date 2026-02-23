@@ -3,7 +3,7 @@ import httpx
 from typing import Any, Dict
 from fastapi import HTTPException
 from app.db import log
-
+from app.apifree_client import apifree_post_with_optional_polling
 APIFREE_API_KEY = os.getenv("APIFREE_API_KEY", "")
 APIFREE_BASE_URL = os.getenv("APIFREE_BASE_URL", "https://api.skycoding.ai").rstrip("/")
 APIFREE_HTTP_TIMEOUT_SEC = int(os.getenv("APIFREE_HTTP_TIMEOUT_SEC", "180"))
