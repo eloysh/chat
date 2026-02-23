@@ -1,6 +1,6 @@
 from typing import Any, Dict
 from app.services.apifree import apifree_post_with_optional_polling
-
+from app.apifree_client import apifree_post_with_optional_polling
 async def run_music(model: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     """
     payload ожидает:
