@@ -1,26 +1,18 @@
-import os
 from typing import Any, Dict
-from fastapi import HTTPException
-from app.services.chat import apifree_post
+from app.services.apifree import apifree_post_with_optional_polling
 
-DEFAULT_VIDEO_MODEL = os.getenv("DEFAULT_VIDEO_MODEL", "klingai/kling-v2.6/pro/image-to-video")
+async def run_video(model: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    prompt = (payload.get("prompt") or payload.get("text") or "").strip()
 
-async def run_video(model: str, prompt: str) -> Dict[str, Any]:
-    """
-    Универсальная генерация видео через API Free.
-    Ожидаем, что провайдер вернёт либо {url: "..."} либо {data: [{url: "..."}]}
-    """
-    if not model:
-        model = DEFAULT_VIDEO_MODEL
+    # пример: поменяй на реальные пути твоих video-моделей
+    path = "model/skywork-ai/skyreels-v3/pro/single-avatar"
 
-    payload = {"model": model, "prompt": prompt}
-    data = await apifree_post("/v1/videos/generations", payload)
-
-    url = data.get("url")
-    if not url and isinstance(data.get("data"), list) and data["data"]:
-        url = data["data"][0].get("url")
-
-    if not url:
-        raise HTTPException(status_code=502, detail={"error": "no_url", "raw": data})
-
-    return {"url": url, "raw": data}
+    req = {"prompt": prompt}
+    data = await apifree_post_with_optional_polling(
+        path,
+        req,
+        request_timeout_s=120.0,
+        max_wait_s=2400.0,   # видео часто дольше
+        poll_every_s=3.0
+    )
+    return data
