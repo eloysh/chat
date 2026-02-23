@@ -2,7 +2,7 @@ import os
 from typing import Any, Dict
 from fastapi import HTTPException
 from app.services.chat import apifree_post
-
+from app.apifree_client import apifree_post_with_optional_polling
 DEFAULT_IMAGE_MODEL = os.getenv("DEFAULT_IMAGE_MODEL", "google/nano-banana-pro")
 
 async def run_image(model: str, prompt: str) -> Dict[str, Any]:
