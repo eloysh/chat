@@ -7,4 +7,4 @@ async def run_chat(model: str, message: str):
         text = data["choices"][0]["message"]["content"]
     except Exception:
         text = str(data)
-    return {"text": text, "raw": data}}
+    return {"text": text, "raw": data}
