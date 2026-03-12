@@ -6,165 +6,136 @@ from typing import Any, Dict, Optional, Tuple
 import httpx
 
 APIFREE_BASE_URL = (os.getenv("APIFREE_BASE_URL") or "https://api.apifree.ai").rstrip("/")
+APIFREE_MODEL_BASE_URL = (os.getenv("APIFREE_MODEL_BASE_URL") or "https://api.skycoding.ai").rstrip("/")
 APIFREE_API_KEY = (os.getenv("APIFREE_API_KEY") or "").strip()
-
-# Если у тебя в /v1/models endpoint_id вида: "google/nano-banana-pro"
-# то вызовы обычно идут на: POST {APIFREE_BASE_URL}/v1/model/{endpoint_id}
-MODEL_CALL_PREFIXES = [
-    "/v1",   # самый вероятный для api.apifree.ai
-    "",      # на случай если у тебя уже base_url содержит /v1
-]
-
-DEFAULT_TIMEOUT = float(os.getenv("APIFREE_HTTP_TIMEOUT_SEC") or "180")
+HTTP_TIMEOUT = float(os.getenv("APIFREE_HTTP_TIMEOUT_SEC") or "180")
 
 class APIFreeError(RuntimeError):
     pass
-
 
 def _auth_headers() -> Dict[str, str]:
     if not APIFREE_API_KEY:
         return {}
     return {"Authorization": f"Bearer {APIFREE_API_KEY}"}
 
+def _clean_endpoint_id(endpoint_id: str) -> str:
+    s = (endpoint_id or "").strip().lstrip("/")
+    for prefix in ("v1/model/", "model/"):
+        if s.startswith(prefix):
+            s = s[len(prefix):]
+    return s
 
-async def _post_json(url: str, payload: Dict[str, Any], timeout_s: float) -> httpx.Response:
+async def _request_json(method: str, url: str, payload: Optional[Dict[str, Any]] = None, timeout_s: float = HTTP_TIMEOUT):
     async with httpx.AsyncClient(timeout=timeout_s, headers=_auth_headers()) as client:
-        return await client.post(url, json=payload)
+        r = await client.request(method, url, json=payload)
 
+    txt = r.text or ""
+    try:
+        data = r.json() if txt else {}
+    except Exception:
+        data = {"raw": txt}
+    return r.status_code, data, txt
 
-async def apifree_post_json(
-    path: str,
-    payload: Dict[str, Any],
-    timeout_s: float = DEFAULT_TIMEOUT,
-) -> Tuple[str, httpx.Response]:
-    """
-    POST JSON на APIFree, перебирая префиксы.
-    Возвращает (final_url, response).
-    """
-    path = path.lstrip("/")  # "model/<endpoint_id>" или "tasks/<id>"
-    last_err: Optional[str] = None
+async def list_models() -> Dict[str, Any]:
+    url = f"{APIFREE_BASE_URL}/v1/models"
+    code, data, txt = await _request_json("GET", url, None)
+    if code != 200:
+        raise APIFreeError(f"list_models failed [{code}]: {txt}")
+    return data
 
-    for pref in MODEL_CALL_PREFIXES:
-        url = f"{APIFREE_BASE_URL}{pref}/{path}".replace("//v1/", "/v1/")
-        try:
-            r = await _post_json(url, payload, timeout_s)
-        except Exception as e:
-            raise APIFreeError(f"APIFREE request failed: {e}") from e
-
-        if r.status_code == 404:
-            last_err = f"404 at {url}"
-            continue
-
-        return url, r
-
-    raise APIFreeError(f"APIFREE endpoint not found (404). Last: {last_err}")
-
+async def chat_completion(model: str, message: str) -> Dict[str, Any]:
+    url = f"{APIFREE_BASE_URL}/v1/chat/completions"
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": message}]
+    }
+    code, data, txt = await _request_json("POST", url, payload)
+    if code < 200 or code >= 300:
+        raise APIFreeError(f"chat failed [{code}]: {txt}")
+    return data
 
 def _extract_task_id(data: Dict[str, Any]) -> Optional[str]:
-    return (
-        data.get("task_id")
-        or data.get("taskId")
-        or data.get("job_id")
-        or data.get("jobId")
-        or data.get("id")
-    )
+    for k in ("task_id", "job_id", "id", "taskId", "jobId"):
+        v = data.get(k)
+        if v:
+            return str(v)
+    return None
 
+def _is_final(data: Dict[str, Any]) -> bool:
+    if any(k in data for k in ("result", "output", "audio_url", "image_url", "video_url", "url", "data")):
+        return True
+    d = data.get("data")
+    if isinstance(d, list) and d and isinstance(d[0], dict) and ("url" in d[0] or "file_url" in d[0]):
+        return True
+    return False
 
-def _looks_like_result(data: Dict[str, Any]) -> bool:
-    # Частые ключи результата у прокси/провайдеров
-    result_keys = ("result", "output", "data", "audio_url", "image_url", "video_url", "url", "urls")
-    return any(k in data for k in result_keys)
+async def model_submit(endpoint_id: str, payload: Dict[str, Any], timeout_s: float = HTTP_TIMEOUT) -> Dict[str, Any]:
+    endpoint_id = _clean_endpoint_id(endpoint_id)
+    url = f"{APIFREE_MODEL_BASE_URL}/v1/model/{endpoint_id}"
+    code, data, txt = await _request_json("POST", url, payload, timeout_s=timeout_s)
+    if code < 200 or code >= 300:
+        raise APIFreeError(f"model submit failed [{code}] {url}: {txt}")
+    if not isinstance(data, dict):
+        return {"raw": txt}
+    data["_model_url"] = url
+    return data
 
+async def model_poll(task_id: str, timeout_s: float = 30.0) -> Optional[Dict[str, Any]]:
+    candidates = [
+        f"{APIFREE_MODEL_BASE_URL}/v1/task/{task_id}",
+        f"{APIFREE_MODEL_BASE_URL}/v1/tasks/{task_id}",
+        f"{APIFREE_MODEL_BASE_URL}/v1/job/{task_id}",
+        f"{APIFREE_MODEL_BASE_URL}/v1/jobs/{task_id}",
+        f"{APIFREE_MODEL_BASE_URL}/v1/result/{task_id}",
+        f"{APIFREE_MODEL_BASE_URL}/v1/results/{task_id}",
+    ]
 
-def _status_value(data: Dict[str, Any]) -> str:
-    return str(data.get("status") or data.get("state") or "").lower().strip()
+    for url in candidates:
+        code, data, txt = await _request_json("GET", url, None, timeout_s=timeout_s)
+        if code == 404:
+            continue
+        if 200 <= code < 300 and isinstance(data, dict):
+            return data
 
+        code, data, txt = await _request_json("POST", url, {}, timeout_s=timeout_s)
+        if 200 <= code < 300 and isinstance(data, dict):
+            return data
+
+    return None
 
 async def apifree_post_with_optional_polling(
     endpoint_id: str,
     payload: Dict[str, Any],
     *,
-    request_timeout_s: float = DEFAULT_TIMEOUT,
-    max_wait_s: float = 1200.0,
+    request_timeout_s: float = HTTP_TIMEOUT,
+    max_wait_s: float = 1800.0,
     poll_every_s: float = 3.0,
 ) -> Dict[str, Any]:
-    """
-    Универсальная функция под APIFree:
-    POST /v1/model/{endpoint_id}
-    - если результат сразу → вернуть
-    - если вернули task/job id → поллить /v1/tasks/{id} (и запасные варианты)
-    """
+    data = await model_submit(endpoint_id, payload, timeout_s=request_timeout_s)
 
-    # 1) стартуем задачу
-    call_path = f"model/{endpoint_id}"
-    final_url, r = await apifree_post_json(call_path, payload, timeout_s=request_timeout_s)
-
-    if r.status_code < 200 or r.status_code >= 300:
-        raise APIFreeError(f"APIFREE {r.status_code} for {final_url}: {r.text}")
-
-    try:
-        data = r.json()
-    except Exception:
-        return {"raw": r.text, "url": final_url}
-
-    if not isinstance(data, dict):
-        return {"data": data, "url": final_url}
-
-    if _looks_like_result(data):
+    if _is_final(data):
         return data
 
     task_id = _extract_task_id(data)
     if not task_id:
-        # нет результата и нет id — вернем как есть, чтобы увидеть формат
         return data
 
-    # 2) поллинг
-    status_paths = [
-        f"tasks/{task_id}",
-        f"task/{task_id}",
-        f"jobs/{task_id}",
-        f"job/{task_id}",
-        f"results/{task_id}",
-        f"result/{task_id}",
-        # иногда провайдеры кладут в model/<endpoint_id>/tasks/<id>
-        f"model/{endpoint_id}/tasks/{task_id}",
-    ]
-
     deadline = asyncio.get_event_loop().time() + max_wait_s
-    last_status: Optional[Dict[str, Any]] = None
+    last_status = None
 
     while asyncio.get_event_loop().time() < deadline:
-        for sp in status_paths:
-            try:
-                status_url, sr = await apifree_post_json(sp, {}, timeout_s=30.0)
-            except APIFreeError:
-                continue
-
-            if sr.status_code == 404:
-                continue
-            if sr.status_code < 200 or sr.status_code >= 300:
-                continue
-
-            try:
-                sdata = sr.json()
-            except Exception:
-                continue
-
-            if not isinstance(sdata, dict):
-                continue
-
+        sdata = await model_poll(task_id)
+        if sdata:
             last_status = sdata
+            status = str(sdata.get("status") or sdata.get("state") or "").lower().strip()
 
-            if _looks_like_result(sdata):
+            if status in ("succeeded", "success", "done", "completed", "finished"):
                 return sdata
-
-            st = _status_value(sdata)
-            if st in ("succeeded", "success", "done", "completed", "finished"):
+            if status in ("failed", "error", "canceled", "cancelled"):
+                raise APIFreeError(f"task failed: {json.dumps(sdata, ensure_ascii=False)[:4000]}")
+            if _is_final(sdata):
                 return sdata
-            if st in ("failed", "error", "canceled", "cancelled"):
-                raise APIFreeError(f"APIFREE task failed: {json.dumps(sdata, ensure_ascii=False)}")
 
         await asyncio.sleep(poll_every_s)
 
-    # таймаут — вернем последний статус, чтобы ты видела что происходит
-    return {"status": "timeout", "last_status": last_status, "task_id": task_id}
+    return {"status": "timeout", "task_id": task_id, "last_status": last_status}
