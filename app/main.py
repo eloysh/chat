@@ -182,7 +182,9 @@ async def api_job(job_id: int):
     }
 
 # ---------- Telegram webhook ----------
-
+@app.on_event("startup")
+async def startup():
+    asyncio.create_task(worker_loop())
 @app.post("/telegram/webhook/hook")
 async def telegram_webhook_hook(req: Request):
     update = await req.json()
